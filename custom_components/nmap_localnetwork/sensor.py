@@ -8,17 +8,18 @@ from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, LOGGER
-from .coordinator import NMapLocalNetworkDataUpdateCoordinator
+from .const import DOMAIN
 from .entity import NMapLocalNetworkEntity
 
 if TYPE_CHECKING:
-    import datetime
+    from datetime import datetime
 
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+    from .coordinator import NMapLocalNetworkDataUpdateCoordinator
     from .data import NMapLocalNetworkConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
@@ -42,45 +43,62 @@ ENTITY_DESCRIPTIONS = (
 )
 
 
+def parse_datetime(value: str | None) -> datetime | None:
+    """Parse datetime string."""
+    if value is None:
+        return None
+
+    return dt_util.parse_datetime(value)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: NMapLocalNetworkConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the sensor platform."""
-    # Create coordinator if not already created
+    coordinator = entry.runtime_data.coordinator
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {}
-    if entry.entry_id not in hass.data[DOMAIN]:
-        # Initialize the coordinator here if needed
-        coordinator = NMapLocalNetworkDataUpdateCoordinator(
-            hass=hass,
-            logger=LOGGER,
-            name=DOMAIN,
-            update_interval=None,
-        )
-        hass.data[DOMAIN][entry.entry_id] = coordinator
-    else:
-        coordinator = hass.data[DOMAIN][entry.entry_id]
-
     entities = []
     # Add the main sensors
     entities.append(NmapTotalHostsSensor(coordinator, ENTITY_DESCRIPTIONS[0]))
     entities.append(NmapScanTimeSensor(coordinator, ENTITY_DESCRIPTIONS[1]))
 
-    # Add individual host sensors if data is available
-    if coordinator.data and "hosts" in coordinator.data:
-        seen_unique_ids = set()
-        for host_data in coordinator.data["hosts"]:
-            host_entity = Host(coordinator, ENTITY_DESCRIPTIONS[2], host_data)
-            if host_entity.unique_id not in seen_unique_ids:
-                entities.append(host_entity)
-                seen_unique_ids.add(host_entity.unique_id)
-            else:
-                _LOGGER.debug(
-                    "Skipping duplicate host entity with unique_id: %s",
-                    host_entity.unique_id,
-                )
+    # Keep track of host entities to manage updates
+    host_entities = []
+
+    # Add a listener to update host sensors when data is available
+    def async_update_host_sensors() -> None:
+        """Update host sensors when coordinator data changes."""
+        # Remove existing host sensors
+        for entity in host_entities[:]:  # Use a copy of the list
+            if entity in entities:
+                entities.remove(entity)
+                host_entities.remove(entity)
+
+        # Add new host sensors if data is available
+        if coordinator.data and "hosts" in coordinator.data:
+            seen_unique_ids = set()
+            for host_data in coordinator.data["hosts"]:
+                host_entity = Host(coordinator, ENTITY_DESCRIPTIONS[2], host_data)
+                if host_entity.unique_id not in seen_unique_ids:
+                    entities.append(host_entity)
+                    host_entities.append(host_entity)
+                    seen_unique_ids.add(host_entity.unique_id)
+                else:
+                    _LOGGER.debug(
+                        "Skipping duplicate host entity with unique_id: %s",
+                        host_entity.unique_id,
+                    )
+        else:
+            _LOGGER.debug("No host data available to create host sensors.")
+
+    # Add the listener to the coordinator
+    entry.async_on_unload(coordinator.async_add_listener(async_update_host_sensors))
+
+    # Initial call to set up host sensors if data is already available
+    async_update_host_sensors()
 
     async_add_entities(entities, update_before_add=True)
 
@@ -98,12 +116,17 @@ class NmapScanTimeSensor(NMapLocalNetworkEntity, SensorEntity):
         self.entity_description = entity_description
 
     @property
-    def state(self) -> datetime.datetime | str:
+    def state(self) -> datetime | None:
         """Return the state of the sensor."""
         if self.coordinator.data is None:
-            return "Unknown"
-        scan_time = self.coordinator.data.get("scan_time")
-        return scan_time if scan_time else "Unknown"
+            return None
+        scan_time_str = self.coordinator.data.get("scan_time")
+        if scan_time_str:
+            try:
+                return parse_datetime(scan_time_str)
+            except ValueError:
+                return None
+        return None
 
     @property
     def unique_id(self) -> str:
@@ -119,7 +142,7 @@ class NmapScanTimeSensor(NMapLocalNetworkEntity, SensorEntity):
                 (DOMAIN, self.coordinator.config_entry.entry_id)
             },
             name="Nmap Local Network Scanner",
-            manufacturer="jari@kaipio.com",
+            manufacturer="Jari Kaipio",
             model="Local Network Scanner",
         )
 
@@ -157,7 +180,7 @@ class NmapTotalHostsSensor(NMapLocalNetworkEntity, SensorEntity):
                 (DOMAIN, self.coordinator.config_entry.entry_id)
             },
             name="Nmap Local Network Scanner",
-            manufacturer="jari@kaipio.com",
+            manufacturer="Jari Kaipio",
             model="Local Network Scanner",
         )
 
@@ -219,7 +242,7 @@ class Host(NMapLocalNetworkEntity, SensorEntity):
                 (DOMAIN, self.coordinator.config_entry.entry_id)
             },
             name="Nmap Local Network Scanner",
-            manufacturer="jari@kaipio.com",
+            manufacturer="Jari Kaipio",
             model="Local Network Scanner",
         )
 
@@ -279,6 +302,6 @@ class Port(NMapLocalNetworkEntity, SensorEntity):
                 (DOMAIN, self.coordinator.config_entry.entry_id)
             },
             name="Nmap Local Network Scanner",
-            manufacturer="jari@kaipio.com",
+            manufacturer="Jari Kaipio",
             model="Local Network Scanner",
         )

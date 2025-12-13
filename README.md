@@ -1,38 +1,77 @@
-# Notice
-
-
-HAVE FUN! 😎
+# Home Assistant Nmap Localnetwork integration
+This Home Assistant integration provides a [Nmap](https://nmap.org/) network scanner information of all devices on your local network.
 
 ## Why?
+This integration was made to save server resources on Home Assistant server by running Nmap in the other server. User can setup the other server for scanning with their own needs with available resources. After working configuration you can make automations to get you local network more secure. Examples:
+- Alert when unknown device is found in your network
+- Alert when security risk in your device is found
+- Alert when important device is down
 
+## Features
+- Automatically updates the list of devices on a periodic basis.
+- Displays the total number of devices currently identified on the network.
+- Displays the last scanning time.
 
-## What?
+## Nmap Server installation
+Before you can use the integration, you need to have the server configured in your local network for scanning and sharing the json data. Official [Nmap](https://nmap.org/) does not provide the json output, so i made the dotnet commandline application to convert Nmap xml output to json. You can use other methods to convert the xml output. The json data needs to be in this format:
+***
+```json
+{
+  "scan_time": "2025-12-13T14:13:02",
+  "total_hosts": 1,
+  "hosts": [
+    {
+      "ip": "192.168.1.1",
+      "status": "up",
+      "ports": [
+        {
+          "port_id": "80",
+          "protocol": "tcp",
+          "state": "open",
+          "service": "http"
+        },
+        {
+          "port_id": "443",
+          "protocol": "tcp",
+          "state": "open",
+          "service": "http"
+        }
+      ]
+    }
+}
+```
 
-This repository contains multiple files, here is a overview:
+***
+Server configuration:
+1. Install the Nmap with your servers installation method
+2. If your server has no web server installed, install nginx or what ever web server
+3. Create shell script to run the Nmap and xml to json conversion. I have this in my script:
+***
+```sh
+nmap -A -T3 -oX /tmp/local_network.xml 192.168.1.0/24
+dotnet /opt/kaipio/nmap/xml2json.dll /tmp/local_network.xml /var/www/html/data/local_network.json
+```
+***
+4. Test that the script is working by running it manually
+5. Add script to crontab. I have this in my server:
+```crontab
+*/20 * * * * /opt/kaipio/nmap/script/gen_localmap.sh
+```
 
-File | Purpose | Documentation
--- | -- | --
-`.devcontainer.json` | Used for development/testing with Visual Studio Code. | [Documentation](https://code.visualstudio.com/docs/remote/containers)
-`.github/ISSUE_TEMPLATE/*.yml` | Templates for the issue tracker | [Documentation](https://help.github.com/en/github/building-a-strong-community/configuring-issue-templates-for-your-repository)
-`custom_components/integration_blueprint/*` | Integration files, this is where everything happens. | [Documentation](https://developers.home-assistant.io/docs/creating_component_index)
-`CONTRIBUTING.md` | Guidelines on how to contribute. | [Documentation](https://help.github.com/en/github/building-a-strong-community/setting-guidelines-for-repository-contributors)
-`LICENSE` | The license file for the project. | [Documentation](https://help.github.com/en/github/creating-cloning-and-archiving-repositories/licensing-a-repository)
-`README.md` | The file you are reading now, should contain info about the integration, installation and configuration instructions. | [Documentation](https://help.github.com/en/github/writing-on-github/basic-writing-and-formatting-syntax)
-`requirements.txt` | Python packages used for development/lint/testing this integration. | [Documentation](https://pip.pypa.io/en/stable/user_guide/#requirements-files)
+## Installation through HACS
+To install the nmap_localnetwork integration using HACS:
 
-## How?
+1. Open Home Assistant, go to HACS > Integrations.
+2. Search for Nmap Localnetwork and install it.
+3. Restart Home Assistant.
+4. After restart, add the integration from Settings -> Devices & services -> Add integration and add configuration, when asked. You need to have the whole URL to the json output and username & password if they are required.
 
-1. Create a new repository in GitHub, using this repository as a template by clicking the "Use this template" button in the GitHub UI.
-1. Open your new repository in Visual Studio Code devcontainer (Preferably with the "`Dev Containers: Clone Repository in Named Container Volume...`" option).
-1. Rename all instances of the `integration_blueprint` to `custom_components/<your_integration_domain>` (e.g. `custom_components/awesome_integration`).
-1. Rename all instances of the `Integration Blueprint` to `<Your Integration Name>` (e.g. `Awesome Integration`).
-1. Run the `scripts/develop` to start HA and test out your new integration.
+## Manual Installation
+To install this integration manually:
 
-## Next steps
+1. Copy the nmap_localnetwork directory into the custom_components directory of your Home Assistant installation.
+2. Restart Home Assistant.
+3. After restart, add the integration from Settings -> Devices & services -> Add integration and add configuration, when asked. You need to have the whole URL to the json output and username & password if they are required.
 
-These are some next steps you may want to look into:
-- Add tests to your integration, [`pytest-homeassistant-custom-component`](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component) can help you get started.
-- Add brand images (logo/icon) to https://github.com/home-assistant/brands.
-- Create your first release.
-- Share your integration on the [Home Assistant Forum](https://community.home-assistant.io/).
-- Submit your integration to [HACS](https://hacs.xyz/docs/publish/start).
+## Contributing
+Contributions to this integration are welcome. Please refer to the project's GitHub repository for contributing guidelines.
