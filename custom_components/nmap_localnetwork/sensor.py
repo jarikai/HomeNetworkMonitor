@@ -36,6 +36,11 @@ ENTITY_DESCRIPTIONS = (
         icon="mdi:timer",
     ),
     SensorEntityDescription(
+        key="nmap_localnetwork_hosts",
+        name="Nmap Hosts data",
+        icon="mdi:computer-network",
+    ),
+    SensorEntityDescription(
         key="host",
         name="Nmap Host info",
         icon="mdi:computer-network",
@@ -81,7 +86,7 @@ async def async_setup_entry(
         if coordinator.data and "hosts" in coordinator.data:
             seen_unique_ids = set()
             for host_data in coordinator.data["hosts"]:
-                host_entity = Host(coordinator, ENTITY_DESCRIPTIONS[2], host_data)
+                host_entity = Host(coordinator, ENTITY_DESCRIPTIONS[3], host_data)
                 if host_entity.unique_id not in seen_unique_ids:
                     entities.append(host_entity)
                     host_entities.append(host_entity)
@@ -100,7 +105,71 @@ async def async_setup_entry(
     # Initial call to set up host sensors if data is already available
     async_update_host_sensors()
 
+    entities.append(NmapHostsSensor(coordinator, ENTITY_DESCRIPTIONS[2]))
+
     async_add_entities(entities, update_before_add=True)
+
+
+class NmapHostsSensor(NMapLocalNetworkEntity, SensorEntity):
+    """Sensor for Nmap scanned hosts."""
+
+    def __init__(
+        self,
+        coordinator: NMapLocalNetworkDataUpdateCoordinator,
+        entity_description: SensorEntityDescription,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self.entity_description = entity_description
+
+    @property
+    def unit_of_measurement(self) -> str:
+        """Return the unit of measurement."""
+        return "Devices"
+
+    async def async_update(self) -> None:
+        """Fetch new state data for the sensor."""
+        _LOGGER.debug("Scanning network")
+        devices = self.coordinator.data.get("hosts") or []
+        self._state = len(devices)
+        self._attr_extra_state_attributes = {"devices": devices}
+
+    @property
+    def state(self) -> int | None:
+        """Return the state of the sensor."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get("total_hosts")
+
+    @property
+    def hosts(self) -> list[Host] | None:
+        """Return the state of the sensor."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get("hosts")
+
+    @property
+    def unique_id(self) -> str:
+        """Return the unique ID of the sensor."""
+        return f"nmap_{self.entity_description.key}"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={
+                # Serial numbers are unique identifiers within a specific domain
+                (DOMAIN, self.coordinator.config_entry.entry_id)
+            },
+            name="Nmap Local Network Scanner",
+            manufacturer="Jari Kaipio",
+            model="Local Network Scanner",
+        )
+
+    @property
+    def should_poll(self) -> bool:
+        """Return True as updates are needed via polling."""
+        return True
 
 
 class NmapScanTimeSensor(NMapLocalNetworkEntity, SensorEntity):
