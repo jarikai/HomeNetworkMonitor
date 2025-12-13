@@ -146,6 +146,11 @@ class NmapScanTimeSensor(NMapLocalNetworkEntity, SensorEntity):
             model="Local Network Scanner",
         )
 
+    @property
+    def should_poll(self) -> bool:
+        """Return True as updates are needed via polling."""
+        return True
+
 
 class NmapTotalHostsSensor(NMapLocalNetworkEntity, SensorEntity):
     """Sensor for Nmap total hosts."""
@@ -183,6 +188,11 @@ class NmapTotalHostsSensor(NMapLocalNetworkEntity, SensorEntity):
             manufacturer="Jari Kaipio",
             model="Local Network Scanner",
         )
+
+    @property
+    def should_poll(self) -> bool:
+        """Return True as updates are needed via polling."""
+        return True
 
 
 class Host(NMapLocalNetworkEntity, SensorEntity):
@@ -245,6 +255,11 @@ class Host(NMapLocalNetworkEntity, SensorEntity):
             manufacturer="Jari Kaipio",
             model="Local Network Scanner",
         )
+
+    @property
+    def should_poll(self) -> bool:
+        """Return True as updates are needed via polling."""
+        return True
 
 
 class Port(NMapLocalNetworkEntity, SensorEntity):

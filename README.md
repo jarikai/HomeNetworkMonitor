@@ -58,10 +58,10 @@ dotnet /opt/kaipio/nmap/xml2json.dll /tmp/local_network.xml /var/www/html/data/l
 */20 * * * * /opt/kaipio/nmap/script/gen_localmap.sh
 ```
 
-## Installation through HACS
+## Installation through HACS (NOT AVAILABLE UNTIL THIS COMMENT IS REMOVED)
 To install the nmap_localnetwork integration using HACS:
 
-1. Open Home Assistant, go to HACS > Integrations.
+1. Open Home Assistant, go to HACS -> Integrations.
 2. Search for Nmap Localnetwork and install it.
 3. Restart Home Assistant.
 4. After restart, add the integration from Settings -> Devices & services -> Add integration and add configuration, when asked. You need to have the whole URL to the json output and username & password if they are required.
@@ -72,6 +72,9 @@ To install this integration manually:
 1. Copy the nmap_localnetwork directory into the custom_components directory of your Home Assistant installation.
 2. Restart Home Assistant.
 3. After restart, add the integration from Settings -> Devices & services -> Add integration and add configuration, when asked. You need to have the whole URL to the json output and username & password if they are required.
+
+## TODO
+1. Make changes to be approved to HACS
 
 ## Contributing
 Contributions to this integration are welcome. Please refer to the project's GitHub repository for contributing guidelines.
