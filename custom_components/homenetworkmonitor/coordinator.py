@@ -1,4 +1,4 @@
-"""DataUpdateCoordinator for nmap_localnetwork."""
+"""DataUpdateCoordinator for homenetworkmonitor."""
 
 from __future__ import annotations
 
@@ -9,31 +9,31 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
-    NMapLocalNetworkApiClientAuthenticationError,
-    NMapLocalNetworkApiClientError,
+    HomeNetworkMonitorApiClientAuthenticationError,
+    HomeNetworkMonitorApiClientError,
 )
 
 if TYPE_CHECKING:
-    from .data import NMapLocalNetworkConfigEntry
+    from .data import HomeNetworkMonitorConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
 
 # https://developers.home-assistant.io/docs/integration_fetching_data#coordinated-single-api-poll-for-data-for-all-entities
-class NMapLocalNetworkDataUpdateCoordinator(DataUpdateCoordinator):
+class HomeNetworkMonitorDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the API."""
 
-    config_entry: NMapLocalNetworkConfigEntry
+    config_entry: HomeNetworkMonitorConfigEntry
 
     async def _async_update_data(self) -> Any:
         """Update data via library."""
         try:
             data = await self.config_entry.runtime_data.client.async_get_data()
             _LOGGER.debug("Data fetched successfully")
-        except NMapLocalNetworkApiClientAuthenticationError as exception:
+        except HomeNetworkMonitorApiClientAuthenticationError as exception:
             _LOGGER.exception("Authentication failed:")
             raise ConfigEntryAuthFailed(exception) from exception
-        except NMapLocalNetworkApiClientError as exception:
+        except HomeNetworkMonitorApiClientError as exception:
             _LOGGER.exception("API error occurred:")  # Changed from error to exception
             raise UpdateFailed(exception) from exception
         except Exception as exception:  # pylint: disable=broad-except

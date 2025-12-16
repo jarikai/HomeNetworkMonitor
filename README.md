@@ -1,4 +1,4 @@
-# Home Assistant Nmap Localnetwork integration
+# Home Assistant Home Network Monitor integration
 This Home Assistant integration provides a [Nmap](https://nmap.org/) network scanner information of all devices on your local network.
 
 ## Why?
@@ -17,27 +17,7 @@ Before you can use the integration, you need to have the server configured in yo
 ***
 ```json
 {
-  "scan_time": "2025-12-13T14:13:02",
-  "total_hosts": 1,
-  "hosts": [
-    {
-      "ip": "192.168.1.1",
-      "status": "up",
-      "ports": [
-        {
-          "port_id": "80",
-          "protocol": "tcp",
-          "state": "open",
-          "service": "http"
-        },
-        {
-          "port_id": "443",
-          "protocol": "tcp",
-          "state": "open",
-          "service": "http"
-        }
-      ]
-    }
+
 }
 ```
 
@@ -59,7 +39,7 @@ dotnet /opt/kaipio/nmap/xml2json.dll /tmp/local_network.xml /var/www/html/data/l
 ```
 
 ## Installation through HACS (NOT AVAILABLE UNTIL THIS COMMENT IS REMOVED)
-To install the nmap_localnetwork integration using HACS:
+To install the homenetworkmonitor integration using HACS:
 
 1. Open Home Assistant, go to HACS -> Integrations.
 2. Search for Nmap Localnetwork and install it.
@@ -69,7 +49,7 @@ To install the nmap_localnetwork integration using HACS:
 ## Manual Installation
 To install this integration manually:
 
-1. Copy the nmap_localnetwork directory into the custom_components directory of your Home Assistant installation.
+1. Copy the homenetworkmonitor directory into the custom_components directory of your Home Assistant installation.
 2. Restart Home Assistant.
 3. After restart, add the integration from Settings -> Devices & services -> Add integration and add configuration, when asked. You need to have the whole URL to the json output and username & password if they are required.
 

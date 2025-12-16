@@ -1,4 +1,4 @@
-"""Adds config flow for Nmap localnetwork."""
+"""Adds config flow for HomeNetworkMonitor."""
 
 from __future__ import annotations
 
@@ -12,18 +12,18 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from slugify import slugify
 
 from .api import (
-    NMapLocalNetworkApiClient,
-    NMapLocalNetworkApiClientAuthenticationError,
-    NMapLocalNetworkApiClientCommunicationError,
-    NMapLocalNetworkApiClientError,
+    HomeNetworkMonitorApiClient,
+    HomeNetworkMonitorApiClientAuthenticationError,
+    HomeNetworkMonitorApiClientCommunicationError,
+    HomeNetworkMonitorApiClientError,
 )
 from .const import DOMAIN, LOGGER
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class NMapLocalNetworkFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
-    """Config flow for NMapLocalNetwork."""
+class HomeNetworkMonitorFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
+    """Config flow for HomeNetworkMonitor."""
 
     VERSION = 1
 
@@ -40,13 +40,13 @@ class NMapLocalNetworkFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     username=user_input[CONF_USERNAME],
                     password=user_input[CONF_PASSWORD],
                 )
-            except NMapLocalNetworkApiClientAuthenticationError as exception:
+            except HomeNetworkMonitorApiClientAuthenticationError as exception:
                 LOGGER.warning(exception)
                 _errors["base"] = "auth"
-            except NMapLocalNetworkApiClientCommunicationError as exception:
+            except HomeNetworkMonitorApiClientCommunicationError as exception:
                 LOGGER.error(exception)
                 _errors["base"] = "connection"
-            except NMapLocalNetworkApiClientError as exception:
+            except HomeNetworkMonitorApiClientError as exception:
                 LOGGER.exception(exception)
                 _errors["base"] = "unknown"
             else:
@@ -94,7 +94,7 @@ class NMapLocalNetworkFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _test_credentials(self, url: str, username: str, password: str) -> None:
         """Validate credentials."""
-        client = NMapLocalNetworkApiClient(
+        client = HomeNetworkMonitorApiClient(
             url=url,
             username=username,
             password=password,

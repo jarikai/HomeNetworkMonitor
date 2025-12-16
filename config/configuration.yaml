@@ -9,4 +9,4 @@ homeassistant:
 logger:
   default: info
   logs:
-    custom_components.nmap_localnetwork: debug
+    custom_components.homenetworkmonitor: debug

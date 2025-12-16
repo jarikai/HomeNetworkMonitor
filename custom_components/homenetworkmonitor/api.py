@@ -12,18 +12,18 @@ import async_timeout
 _LOGGER = logging.getLogger(__name__)
 
 
-class NMapLocalNetworkApiClientError(Exception):
+class HomeNetworkMonitorApiClientError(Exception):
     """Exception to indicate a general API error."""
 
 
-class NMapLocalNetworkApiClientCommunicationError(
-    NMapLocalNetworkApiClientError,
+class HomeNetworkMonitorApiClientCommunicationError(
+    HomeNetworkMonitorApiClientError,
 ):
     """Exception to indicate a communication error."""
 
 
-class NMapLocalNetworkApiClientAuthenticationError(
-    NMapLocalNetworkApiClientError,
+class HomeNetworkMonitorApiClientAuthenticationError(
+    HomeNetworkMonitorApiClientError,
 ):
     """Exception to indicate an authentication error."""
 
@@ -32,13 +32,13 @@ def _verify_response_or_raise(response: aiohttp.ClientResponse) -> None:
     """Verify that the response is valid."""
     if response.status in (401, 403):
         msg = "Invalid credentials"
-        raise NMapLocalNetworkApiClientAuthenticationError(
+        raise HomeNetworkMonitorApiClientAuthenticationError(
             msg,
         )
     response.raise_for_status()
 
 
-class NMapLocalNetworkApiClient:
+class HomeNetworkMonitorApiClient:
     """NMap localnetwork API Client."""
 
     def __init__(
@@ -82,16 +82,16 @@ class NMapLocalNetworkApiClient:
 
         except TimeoutError as exception:
             msg = f"Timeout error fetching information - {exception}"
-            raise NMapLocalNetworkApiClientCommunicationError(
+            raise HomeNetworkMonitorApiClientCommunicationError(
                 msg,
             ) from exception
         except (aiohttp.ClientError, socket.gaierror) as exception:
             msg = f"Error fetching information - {exception}"
-            raise NMapLocalNetworkApiClientCommunicationError(
+            raise HomeNetworkMonitorApiClientCommunicationError(
                 msg,
             ) from exception
         except Exception as exception:  # pylint: disable=broad-except
             msg = f"Something really wrong happened! - {exception}"
-            raise NMapLocalNetworkApiClientError(
+            raise HomeNetworkMonitorApiClientError(
                 msg,
             ) from exception

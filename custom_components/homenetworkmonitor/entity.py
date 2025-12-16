@@ -1,4 +1,4 @@
-"""NMapLocalNetworkEntity class."""
+"""HomeNetworkMonitorEntity class."""
 
 from __future__ import annotations
 
@@ -8,17 +8,19 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import ATTRIBUTION
-from .coordinator import NMapLocalNetworkDataUpdateCoordinator
+from .coordinator import HomeNetworkMonitorDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class NMapLocalNetworkEntity(CoordinatorEntity[NMapLocalNetworkDataUpdateCoordinator]):
-    """NMapLocalNetworkEntity class."""
+class HomeNetworkMonitorEntity(
+    CoordinatorEntity[HomeNetworkMonitorDataUpdateCoordinator]
+):
+    """HomeNetworkMonitorEntity class."""
 
     _attr_attribution = ATTRIBUTION
 
-    def __init__(self, coordinator: NMapLocalNetworkDataUpdateCoordinator) -> None:
+    def __init__(self, coordinator: HomeNetworkMonitorDataUpdateCoordinator) -> None:
         """Initialize."""
         super().__init__(coordinator)
         self._attr_unique_id = coordinator.config_entry.entry_id
