@@ -436,8 +436,19 @@ class Host(HomeNetworkMonitorEntity, SensorEntity):
             elif isinstance(address_data, list) and len(address_data) > 0:
                 # Handle case where address is a list
                 first_addr = address_data[0]
-                if isinstance(first_addr, dict):
+                if (
+                    isinstance(first_addr, dict)
+                    and first_addr.get("addrtype") == "ipv4"
+                ):
                     self._ip = first_addr.get("addr", "unknown")
+                if address_data and len(address_data) > 1:
+                    second_addr = address_data[1]
+                    if (
+                        isinstance(second_addr, dict)
+                        and second_addr.get("addrtype") == "mac"
+                    ):
+                        self._mac = second_addr.get("addr", "unknown")
+
         if not self._ip or self._ip == "unknown":
             self._ip = self._host_data.get("addr", "unknown")
 
@@ -471,7 +482,7 @@ class Host(HomeNetworkMonitorEntity, SensorEntity):
             attributes["ip"] = self._ip
             attributes["status"] = self._host_data.get("status", "unknown")
             attributes["state"] = self._host_data.get("state", "unknown")
-            attributes["mac"] = self._host_data.get("mac", "unknown")
+            attributes["mac"] = self._mac if hasattr(self, "_mac") else "unknown"
             attributes["hostname"] = self._host_data.get("hostname", "unknown")
             attributes["os"] = self._host_data.get("os", {})
             attributes["uptime"] = self._host_data.get("uptime", {})
