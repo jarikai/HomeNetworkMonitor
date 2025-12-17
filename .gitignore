@@ -16,3 +16,7 @@ coverage.xml
 # Home Assistant configuration
 config/*
 !config/configuration.yaml
+/.vs
+/dotnet/nmapxml2json/.vs
+/dotnet/nmapxml2json/bin
+/dotnet/nmapxml2json/obj
