@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
@@ -35,19 +35,24 @@ ENTITY_DESCRIPTIONS = (
         icon="mdi:computer-network",
     ),
     SensorEntityDescription(
-        key="homenetworkmonitor_hosts",
-        name="Nmap Hosts data",
+        key="homenetworkmonitor_host",
+        name="Nmap Host data",
         icon="mdi:computer-network",
     ),
     SensorEntityDescription(
         key="homenetworkmonitor_postscript",
         name="Nmap postscript data",
-        icon="mdi:secure",
+        icon="mdi:information-outline",
     ),
     SensorEntityDescription(
         key="homenetworkmonitor_runstats",
         name="Nmap runstats data",
-        icon="mdi:statistics",
+        icon="mdi:information-outline",
+    ),
+    SensorEntityDescription(
+        key="homenetworkmonitor_port",
+        name="Nmap host port data",
+        icon="mdi:port-hole",
     ),
 )
 
@@ -104,11 +109,23 @@ async def async_setup_entry(
                         entities.append(host_entity)
                         host_entities.append(host_entity)
                         seen_unique_ids.add(host_entity.unique_id)
-                    else:
-                        _LOGGER.debug(
-                            "Skipping duplicate host entity with unique_id: %s",
-                            host_entity.unique_id,
-                        )
+                        # add Port entities for each host
+
+                        ports_data = host_data.get("os", {}).get("portused", [])
+                        if ports_data is not None:
+                            for port_data in ports_data:
+                                port_entity = Port(
+                                    coordinator,
+                                    ENTITY_DESCRIPTIONS[5],
+                                    port_data,
+                                    ip_address=host_data.get("address", "unknown")[
+                                        0
+                                    ].get("addr", "unknown"),
+                                )
+                                if port_entity.unique_id not in seen_unique_ids:
+                                    entities.append(port_entity)
+                                    host_entities.append(port_entity)
+                                    seen_unique_ids.add(port_entity.unique_id)
                 except Exception:
                     _LOGGER.exception("Error creating host entity:")
         else:
@@ -155,6 +172,7 @@ class NmapRunstatsSensor(HomeNetworkMonitorEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = entity_description
         self._runstats_data = runstats_data or {}
+        self._attr_unique_id = f"{DOMAIN}_{self.entity_description.key}"
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
@@ -199,9 +217,11 @@ class NmapRunstatsSensor(HomeNetworkMonitorEntity, SensorEntity):
         """Return device information."""
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.config_entry.entry_id)},
-            name="HomeNetworkMonitor",
+            name="Home Network Monitor",
             manufacturer="Jari Kaipio",
             model="Local Network Scanner",
+            configuration_url=self.coordinator.config_entry.data.get("url", ""),
+            entry_type=DeviceEntryType.SERVICE,
         )
 
     @property
@@ -223,6 +243,7 @@ class NmapPostScriptSensor(HomeNetworkMonitorEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = entity_description
         self._post_script_data = post_script_data or {}
+        self._attr_unique_id = f"{DOMAIN}_{self.entity_description.key}"
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
@@ -260,9 +281,11 @@ class NmapPostScriptSensor(HomeNetworkMonitorEntity, SensorEntity):
         """Return device information."""
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.config_entry.entry_id)},
-            name="HomeNetworkMonitor",
+            name="Home Network Monitor",
             manufacturer="Jari Kaipio",
             model="Local Network Scanner",
+            configuration_url=self.coordinator.config_entry.data.get("url", ""),
+            entry_type=DeviceEntryType.SERVICE,
         )
 
     @property
@@ -283,6 +306,7 @@ class NmapHostsSensor(HomeNetworkMonitorEntity, SensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.entity_description = entity_description
+        self._attr_unique_id = f"{DOMAIN}_{self.entity_description.key}"
         self._host_data = host_data or {}
 
     @property
@@ -307,9 +331,11 @@ class NmapHostsSensor(HomeNetworkMonitorEntity, SensorEntity):
         """Return device information."""
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.config_entry.entry_id)},
-            name="HomeNetworkMonitor",
+            name="Home Network Monitor",
             manufacturer="Jari Kaipio",
             model="Local Network Scanner",
+            configuration_url=self.coordinator.config_entry.data.get("url", ""),
+            entry_type=DeviceEntryType.SERVICE,
         )
 
     @property
@@ -329,6 +355,7 @@ class NmapScanInfoSensor(HomeNetworkMonitorEntity, SensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.entity_description = entity_description
+        self._attr_unique_id = f"{DOMAIN}_{self.entity_description.key}"
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
@@ -366,9 +393,11 @@ class NmapScanInfoSensor(HomeNetworkMonitorEntity, SensorEntity):
         """Return device information."""
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.config_entry.entry_id)},
-            name="HomeNetworkMonitor",
+            name="Home Network Monitor",
             manufacturer="Jari Kaipio",
             model="Local Network Scanner",
+            configuration_url=self.coordinator.config_entry.data.get("url", ""),
+            entry_type=DeviceEntryType.SERVICE,
         )
 
     @property
@@ -412,26 +441,27 @@ class Host(HomeNetworkMonitorEntity, SensorEntity):
         if not self._ip or self._ip == "unknown":
             self._ip = self._host_data.get("addr", "unknown")
 
-        self._unique_id = f"homenetworkmonitor_host_{self._ip}"
+        self._attr_unique_id = f"{DOMAIN}_host_{self._ip}"
 
     @property
     def unique_id(self) -> str:
         """Return the unique ID of the sensor."""
-        return self._unique_id
+        if self._attr_unique_id is not None:
+            return self._attr_unique_id
+        return f"homenetworkmonitor_host_{self._ip}"
 
     @property
     def state(self) -> str:
         """Return the state of the sensor."""
-        result = "unknown"
-        if self._host_data.get("state", "unknown") != "unknown":
-            result = self._host_data.get("state", "unknown")
-
-        return str(result)
+        status_data = self._host_data.get("status", {})
+        if isinstance(status_data, dict):
+            return status_data.get("state", "unknown")
+        return "unknown"
 
     @property
     def name(self) -> str:
         """Return the name of the sensor."""
-        return f"Nmap Host {self._ip}"
+        return f"Host {self._ip}"
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
@@ -455,9 +485,11 @@ class Host(HomeNetworkMonitorEntity, SensorEntity):
         """Return device information."""
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.config_entry.entry_id)},
-            name="HomeNetworkMonitor",
+            name="Home Network Monitor",
             manufacturer="Jari Kaipio",
             model="Local Network Scanner",
+            configuration_url=self.coordinator.config_entry.data.get("url", ""),
+            entry_type=DeviceEntryType.SERVICE,
         )
 
     @property
@@ -481,8 +513,9 @@ class Port(HomeNetworkMonitorEntity, SensorEntity):
         self.entity_description = entity_description
         self._port_data = port_data
         self._port_number = port_data.get("portid", "unknown")
-        self._unique_id = f"homenetworkmonitor_port_{ip_address}_{self._port_number}"
+        self._unique_id = f"{DOMAIN}_port_{ip_address}_{self._port_number}"
         self._ip_address = ip_address
+        self._attr_unique_id = f"{DOMAIN}_port_{ip_address}_{self._port_number}"
 
     @property
     def unique_id(self) -> str:
@@ -497,20 +530,16 @@ class Port(HomeNetworkMonitorEntity, SensorEntity):
     @property
     def name(self) -> str:
         """Return the name of the sensor."""
-        return f"Nmap Port {self._port_number} on {self._ip_address}"
+        return f"Port {self._port_number} on {self._ip_address}"
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
         """Return the state attributes."""
         attributes = {}
         if self._port_data:
-            attributes["port_id"] = self._port_number
-            attributes["protocol"] = self._port_data.get("protocol", "unknown")
+            attributes["portid"] = self._port_number
+            attributes["proto"] = self._port_data.get("proto", "unknown")
             attributes["state"] = self._port_data.get("state", "unknown")
-            attributes["service"] = self._port_data.get("service", "unknown")
-            attributes["version"] = self._port_data.get("version", "unknown")
-            attributes["product"] = self._port_data.get("product", "unknown")
-            attributes["ip_address"] = self._ip_address
         return attributes
 
     @property
@@ -518,9 +547,11 @@ class Port(HomeNetworkMonitorEntity, SensorEntity):
         """Return device information."""
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.config_entry.entry_id)},
-            name="HomeNetworkMonitor",
+            name="Home Network Monitor",
             manufacturer="Jari Kaipio",
             model="Local Network Scanner",
+            configuration_url=self.coordinator.config_entry.data.get("url", ""),
+            entry_type=DeviceEntryType.SERVICE,
         )
 
     @property
