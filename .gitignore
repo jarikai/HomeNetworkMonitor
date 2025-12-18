@@ -21,5 +21,4 @@ config/*
 /.vs
 /dotnet/nmapxml2json/.vs
 /dotnet/nmapxml2json/bin
-/dotnet/nmapxml2json/
 obj
