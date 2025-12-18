@@ -13,11 +13,67 @@ This integration was made to save server resources on Home Assistant server by r
 - Displays the last scanning time.
 
 ## Nmap Server installation
-Before you can use the integration, you need to have the server configured in your local network for scanning and sharing the json data. Official [Nmap](https://nmap.org/) does not provide the json output, so i made the dotnet commandline application to convert Nmap xml output to json. You can use other methods to convert the xml output. The json data needs to be in this format:
+Before you can use the integration, you need to have the server configured in your local network for scanning and sharing the json data. Official [Nmap](https://nmap.org/) does not provide the json output, so i made the dotnet commandline application to convert Nmap xml output to json. If you need to use other methos to convert xmal,  the json data needs to be in this format:
 ***
 ```json
 {
-
+  "scaninfo": null,
+  "verbose": null,
+  "debugging": null,
+  "hosthint": null,
+  "host": [
+    {
+      "status": {
+        "state": "up",
+        "reason": "localhost",
+        "reason_ttl": 0
+      },
+      "address": [
+        {
+          "addr": "127.0.0.1",
+          "addrtype": "ipv4",
+          "vendor": null
+        }
+      ],
+      "hostnames": {},
+      "ports": {
+        "extraports": null,
+        "port": null
+      },
+      "os": null,
+      "uptime": null,
+      "distance": null,
+      "tcpsequence": null,
+      "ipidsequence": null,
+      "tcptssequence": null,
+      "hostscript": null,
+      "trace": null,
+      "times": null,
+      "starttime": 1616161616,
+      "endtime": 1616161620
+    }
+  ],
+  "postscript": null,
+  "runstats": {
+    "finished": {
+      "time": 1616161620,
+      "timestr": "Wed Mar 17 12:00:00 2021",
+      "summary": "Nmap done at Wed Mar 17 12:00:00 2021; 1 IP address (1 host up) scanned in 4.00 seconds",
+      "elapsed": 4.00,
+      "exit": "success"
+    },
+    "hosts": {
+      "up": 1,
+      "down": 0,
+      "total": 1
+    }
+  },
+  "scanner": "nmap",
+  "args": "-sV -oX test.xml scanme.nmap.org",
+  "start": 1616161616,
+  "startstr": null,
+  "version": 7.0,
+  "xmloutputversion": 1.0
 }
 ```
 
