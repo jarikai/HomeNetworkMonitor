@@ -9,7 +9,6 @@
   "requirements": [
     "requests"
   ],
-  "code_type": "python",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/jarikai/HomeNetworkMonitor/issues",
   "description": "Integrates Nmap scanning results of local network devices and ports.",
