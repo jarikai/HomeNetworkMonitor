@@ -84,7 +84,7 @@ Server configuration:
 3. Create shell script to run the Nmap and xml to json conversion. I have this in my script:
 ***
 ```sh
-nmap -A -T3 -oX /tmp/local_network.xml 192.168.1.0/24
+nmap -sS -sV -O -F --host-timeout 30s -oX /tmp/local_network.xml 192.168.1.0/24
 dotnet /opt/kaipio/nmap/nmapxml2json.dll /tmp/local_network.xml /var/www/html/data/local_network.json
 ```
 ***
