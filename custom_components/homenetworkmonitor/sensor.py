@@ -196,16 +196,14 @@ class NmapRunstatsSensor(HomeNetworkMonitorEntity, SensorEntity):
         return attributes
 
     @property
-    def unit_of_measurement(self) -> str:
-        """Return the unit of measurement."""
-        return "Devices"
-
-    @property
-    def state(self) -> int | None:
+    def state(self) -> str:
         """Return the state of the sensor."""
         if self.coordinator.data is None:
-            return None
-        return len(self._runstats_data)
+            return "unknown"
+        finished = self._runstats_data.get("finished", {})
+        if finished:
+            return finished.get("exit", "unknown")
+        return "unknown"
 
     @property
     def unique_id(self) -> str:
