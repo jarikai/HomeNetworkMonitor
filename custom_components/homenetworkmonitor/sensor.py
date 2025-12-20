@@ -111,7 +111,9 @@ async def async_setup_entry(
                         seen_unique_ids.add(host_entity.unique_id)
                         # add Port entities for each host
 
-                        ports_data = host_data.get("os", {}).get("portused", [])
+                        ports_data = host_data.get("os", {})
+                        if isinstance(ports_data, dict):
+                            ports_data = ports_data.get("portused", [])
                         if ports_data is not None:
                             for port_data in ports_data:
                                 port_entity = Port(
@@ -128,8 +130,6 @@ async def async_setup_entry(
                                     seen_unique_ids.add(port_entity.unique_id)
                 except Exception:
                     _LOGGER.exception("Error creating host entity:")
-        else:
-            _LOGGER.debug("No host data available to create host sensors.")
 
     # Add the listener to the coordinator
     entry.async_on_unload(coordinator.async_add_listener(async_update_host_sensors))
@@ -224,11 +224,6 @@ class NmapRunstatsSensor(HomeNetworkMonitorEntity, SensorEntity):
             entry_type=DeviceEntryType.SERVICE,
         )
 
-    @property
-    def should_poll(self) -> bool:
-        """Return True as updates are needed."""
-        return True
-
 
 class NmapPostScriptSensor(HomeNetworkMonitorEntity, SensorEntity):
     """Sensor for Nmap scanning result output."""
@@ -288,11 +283,6 @@ class NmapPostScriptSensor(HomeNetworkMonitorEntity, SensorEntity):
             entry_type=DeviceEntryType.SERVICE,
         )
 
-    @property
-    def should_poll(self) -> bool:
-        """Return True as updates are needed."""
-        return True
-
 
 class NmapHostsSensor(HomeNetworkMonitorEntity, SensorEntity):
     """Sensor for Nmap scanned hosts."""
@@ -337,11 +327,6 @@ class NmapHostsSensor(HomeNetworkMonitorEntity, SensorEntity):
             configuration_url=self.coordinator.config_entry.data.get("url", ""),
             entry_type=DeviceEntryType.SERVICE,
         )
-
-    @property
-    def should_poll(self) -> bool:
-        """Return True as updates are needed."""
-        return True
 
 
 class NmapScanInfoSensor(HomeNetworkMonitorEntity, SensorEntity):
@@ -399,11 +384,6 @@ class NmapScanInfoSensor(HomeNetworkMonitorEntity, SensorEntity):
             configuration_url=self.coordinator.config_entry.data.get("url", ""),
             entry_type=DeviceEntryType.SERVICE,
         )
-
-    @property
-    def should_poll(self) -> bool:
-        """Return True as updates are needed."""
-        return True
 
 
 class Host(HomeNetworkMonitorEntity, SensorEntity):
@@ -503,11 +483,6 @@ class Host(HomeNetworkMonitorEntity, SensorEntity):
             entry_type=DeviceEntryType.SERVICE,
         )
 
-    @property
-    def should_poll(self) -> bool:
-        """Return True as updates are needed."""
-        return True
-
 
 class Port(HomeNetworkMonitorEntity, SensorEntity):
     """Sensor for individual port information."""
@@ -564,8 +539,3 @@ class Port(HomeNetworkMonitorEntity, SensorEntity):
             configuration_url=self.coordinator.config_entry.data.get("url", ""),
             entry_type=DeviceEntryType.SERVICE,
         )
-
-    @property
-    def should_poll(self) -> bool:
-        """Return True as updates are needed."""
-        return True

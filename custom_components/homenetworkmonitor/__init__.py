@@ -8,7 +8,6 @@ https://github.com/jarikai/homenetworkmonitor
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from homeassistant.const import CONF_PASSWORD, CONF_URL, CONF_USERNAME, Platform
@@ -16,7 +15,6 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.loader import async_get_loaded_integration
 
 from .api import HomeNetworkMonitorApiClient
-from .const import DOMAIN, LOGGER
 from .coordinator import HomeNetworkMonitorDataUpdateCoordinator
 from .data import HomeNetworkMonitorData
 
@@ -38,20 +36,23 @@ async def async_setup_entry(
     entry: HomeNetworkMonitorConfigEntry,
 ) -> bool:
     """Set up this integration using UI."""
+    # Create the API client
+    client = HomeNetworkMonitorApiClient(
+        hass=hass,
+        url=entry.data[CONF_URL],
+        username=entry.data[CONF_USERNAME],
+        password=entry.data[CONF_PASSWORD],
+        session=async_get_clientsession(hass),
+    )
+
     coordinator = HomeNetworkMonitorDataUpdateCoordinator(
         hass=hass,
-        logger=LOGGER,
-        name=DOMAIN,
-        update_interval=timedelta(minutes=5),
+        client=client,
+        config_entry=entry,
     )
     # Store data for this config entry
     entry.runtime_data = HomeNetworkMonitorData(
-        client=HomeNetworkMonitorApiClient(
-            url=entry.data[CONF_URL],
-            username=entry.data[CONF_USERNAME],
-            password=entry.data[CONF_PASSWORD],
-            session=async_get_clientsession(hass),
-        ),
+        client=client,
         integration=async_get_loaded_integration(hass, entry.domain),
         coordinator=coordinator,
     )

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import logging
 import socket
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import async_timeout
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,12 +50,14 @@ class HomeNetworkMonitorApiClient:
         username: str,
         password: str,
         session: aiohttp.ClientSession,
+        hass: HomeAssistant,
     ) -> None:
         """NMap localnetwork API Client."""
         self._url = url
         self._username = username
         self._password = password
         self._session = session
+        self._hass = hass
 
     async def async_get_data(self) -> Any:
         """Get data from the API."""
