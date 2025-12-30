@@ -50,12 +50,14 @@ class HomeNetworkMonitorDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER,
             name=DOMAIN,
             update_interval=update_interval_timedelta,
+            always_update=True,
         )
 
     async def _async_update_data(self) -> Any:
         """Update data via library."""
         try:
             data = await self.client.async_get_data()
+            await self._async_process_raw(data)
             _LOGGER.debug("Data fetched successfully")
         except HomeNetworkMonitorApiClientAuthenticationError as exception:
             _LOGGER.exception("Authentication failed:")
@@ -69,3 +71,24 @@ class HomeNetworkMonitorDataUpdateCoordinator(DataUpdateCoordinator):
             )  # Changed from error to exception
             raise UpdateFailed(exception) from exception
         return data
+
+    async def _async_process_raw(self, raw_data: Any) -> None:
+        """Extract the ip of the host."""
+        # raw_data comes from nmap: {"host": [...], "link": [...]}
+        self._host_map = {self._extract_ip(h): h for h in raw_data.get("host", [])}
+        _LOGGER.debug(
+            "_host_map size %s in coordinator _async_process_raw", len(self._host_map)
+        )
+
+    @staticmethod
+    def _extract_ip(host_data: dict) -> str:
+        """Extract the ip of the host."""
+        addr = host_data.get("address", [])
+        if isinstance(addr, list) and addr:
+            return addr[0].get("addr", "unknown")
+        return host_data.get("ip", "unknown")
+
+    @property
+    def host_map(self) -> dict:
+        """The available of the sensor ."""
+        return self._host_map

@@ -61,6 +61,7 @@ class HomeNetworkMonitorApiClient:
 
     async def async_get_data(self) -> Any:
         """Get data from the API."""
+        _LOGGER.debug("DataUpdateCoordinator: fetching data")
         return await self._api_wrapper(
             method="get",
             url=self._url,

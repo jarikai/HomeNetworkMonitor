@@ -10,3 +10,4 @@ logger:
   default: info
   logs:
     custom_components.homenetworkmonitor: debug
+    homeassistant.components.sensor: debug

@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import SensorEntityDescription
+from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .entity import HomeNetworkMonitorEntity
+from .coordinator import HomeNetworkMonitorDataUpdateCoordinator
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -18,7 +21,6 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .coordinator import HomeNetworkMonitorDataUpdateCoordinator
     from .data import HomeNetworkMonitorConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,17 +34,17 @@ ENTITY_DESCRIPTIONS = (
     SensorEntityDescription(
         key="homenetworkmonitor_hosthint",
         name="Nmap basic host info",
-        icon="mdi:computer-network",
+        icon="mdi:lan-connect",
     ),
     SensorEntityDescription(
         key="homenetworkmonitor_host",
         name="Nmap Host data",
-        icon="mdi:computer-network",
+        icon="mdi:lan-connect",
     ),
     SensorEntityDescription(
         key="homenetworkmonitor_postscript",
         name="Nmap postscript data",
-        icon="mdi:information-outline",
+        icon="mdi:security-network",
     ),
     SensorEntityDescription(
         key="homenetworkmonitor_runstats",
@@ -52,7 +54,7 @@ ENTITY_DESCRIPTIONS = (
     SensorEntityDescription(
         key="homenetworkmonitor_port",
         name="Nmap host port data",
-        icon="mdi:port-hole",
+        icon="mdi:server-plus-outline",
     ),
 )
 
@@ -72,94 +74,101 @@ async def async_setup_entry(
 ) -> None:
     """Set up the sensor platform."""
     coordinator = entry.runtime_data.coordinator
+
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {}
-    entities = []
-    # Add the main sensors
 
-    # Keep track of host entities to manage updates
-    host_entities = []
+    # Kick off the first update immediately
+    await coordinator.async_request_refresh()
 
-    # Add a listener to update host sensors when data is available
-    def async_update_host_sensors() -> None:
-        """Update host sensors when coordinator data changes."""
-        # Remove existing host sensors
-        for entity in host_entities[:]:  # Use a copy of the list
-            if entity in entities:
-                entities.remove(entity)
-                host_entities.remove(entity)
+    dynamic_entities: dict[
+        str, CoordinatorEntity[HomeNetworkMonitorDataUpdateCoordinator]
+    ] = {}
 
-        # Add new host sensors if data is available
-        if coordinator.data and "host" in coordinator.data:
-            seen_unique_ids = set()
-            # Handle both old and new structure formats
-            hosts_data = coordinator.data["host"]
-            if isinstance(hosts_data, list):
-                host_list = hosts_data
-            else:
-                # If it's a dict with hosts as a key
-                host_list = (
-                    hosts_data.get("host", []) if isinstance(hosts_data, dict) else []
+    @callback
+    def async_update_dynamic_entities() -> None:
+        if not coordinator.data:
+            return
+
+        entity_registry = er.async_get(hass)
+        new_ids: set[str] = set()
+        hosts_data = coordinator.data.get("host", [])
+        host_list = (
+            hosts_data.get("host", []) if isinstance(hosts_data, dict) else hosts_data
+        )
+
+        for host_data in host_list:
+            host = Host(coordinator, ENTITY_DESCRIPTIONS[2], host_data)
+            host_id = Host.make_unique_id(host.ip)
+            entity_id = entity_registry.async_get_entity_id(
+                domain="sensor",
+                platform=DOMAIN,
+                unique_id=host_id,
+            )
+
+            if entity_id:
+                _LOGGER.debug(
+                    "Entity with unique_id %s already exists as %s", host_id, entity_id
+                )
+            elif host_id not in dynamic_entities:
+                new_ids.add(host_id)
+                dynamic_entities[host_id] = host
+                async_add_entities([dynamic_entities[host_id]])
+
+            os_data = host_data.get("os")
+
+            ports = os_data.get("portused") or [] if isinstance(os_data, dict) else []
+
+            for port_data in ports:
+                port = Port(
+                    coordinator,
+                    ENTITY_DESCRIPTIONS[5],
+                    host_data,
+                    port_data,
+                )
+                port_id = Port.make_unique_id(host.ip, port_data)
+                entity_id = entity_registry.async_get_entity_id(
+                    domain="sensor",
+                    platform=DOMAIN,
+                    unique_id=port_id,
                 )
 
-            for host_data in host_list:
-                try:
-                    host_entity = Host(coordinator, ENTITY_DESCRIPTIONS[2], host_data)
-                    if host_entity.unique_id not in seen_unique_ids:
-                        entities.append(host_entity)
-                        host_entities.append(host_entity)
-                        seen_unique_ids.add(host_entity.unique_id)
-                        # add Port entities for each host
+                if entity_id:
+                    _LOGGER.debug(
+                        "Entity with unique_id %s already exists as %s",
+                        port_id,
+                        entity_id,
+                    )
+                elif port_id not in dynamic_entities:
+                    new_ids.add(port_id)
+                    dynamic_entities[port_id] = port
+                    async_add_entities([dynamic_entities[port_id]])
 
-                        ports_data = host_data.get("os", {})
-                        if isinstance(ports_data, dict):
-                            ports_data = ports_data.get("portused", [])
-                        if ports_data is not None:
-                            for port_data in ports_data:
-                                port_entity = Port(
-                                    coordinator,
-                                    ENTITY_DESCRIPTIONS[5],
-                                    port_data,
-                                    ip_address=host_data.get("address", "unknown")[
-                                        0
-                                    ].get("addr", "unknown"),
-                                )
-                                if port_entity.unique_id not in seen_unique_ids:
-                                    entities.append(port_entity)
-                                    host_entities.append(port_entity)
-                                    seen_unique_ids.add(port_entity.unique_id)
-                except Exception:
-                    _LOGGER.exception("Error creating host entity:")
-
-    # Add the listener to the coordinator
-    entry.async_on_unload(coordinator.async_add_listener(async_update_host_sensors))
-
-    # Initial call to set up host sensors if data is already available
-    async_update_host_sensors()
-
+    entry.async_on_unload(coordinator.async_add_listener(async_update_dynamic_entities))
     # Add main sensors
+    static_entities = []
     host_hint_data = coordinator.data.get("hosthint", {})
-    if host_hint_data:
-        entities.append(
-            NmapHostsSensor(coordinator, ENTITY_DESCRIPTIONS[1], host_hint_data)
-        )
+    static_entities.append(
+        NmapHostsSensor(coordinator, ENTITY_DESCRIPTIONS[1], host_hint_data)
+    )
 
-    entities.append(NmapScanInfoSensor(coordinator, ENTITY_DESCRIPTIONS[0]))
+    static_entities.append(NmapScanInfoSensor(coordinator, ENTITY_DESCRIPTIONS[0]))
     post_script_data = coordinator.data.get("postscript", {})
-    if post_script_data:
-        entities.append(
-            NmapPostScriptSensor(coordinator, ENTITY_DESCRIPTIONS[3], post_script_data)
-        )
+    static_entities.append(
+        NmapPostScriptSensor(coordinator, ENTITY_DESCRIPTIONS[3], post_script_data)
+    )
     runstats_data = coordinator.data.get("runstats", {})
-    if runstats_data:
-        entities.append(
-            NmapRunstatsSensor(coordinator, ENTITY_DESCRIPTIONS[4], runstats_data)
-        )
+    static_entities.append(
+        NmapRunstatsSensor(coordinator, ENTITY_DESCRIPTIONS[4], runstats_data)
+    )
 
-    async_add_entities(entities, update_before_add=True)
+    async_add_entities(static_entities)
+    async_update_dynamic_entities()
 
 
-class NmapRunstatsSensor(HomeNetworkMonitorEntity, SensorEntity):
+class NmapRunstatsSensor(
+    CoordinatorEntity[HomeNetworkMonitorDataUpdateCoordinator],
+):
     """Sensor for Nmap scanning result output."""
 
     def __init__(
@@ -173,6 +182,26 @@ class NmapRunstatsSensor(HomeNetworkMonitorEntity, SensorEntity):
         self.entity_description = entity_description
         self._runstats_data = runstats_data or {}
         self._attr_unique_id = f"{DOMAIN}_{self.entity_description.key}"
+        self._state = "unknown"
+        finished = self._runstats_data.get("finished", {})
+        if finished:
+            self._state = finished.get("exit", "unknown")
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update sensor data when the coordinator publishes a new payload."""
+        _LOGGER.debug("Sensors %s _handle_coordinator_update called.", self.name)
+        if self.coordinator.data is None:
+            self._state = "unknown"
+        else:
+            self._runstats_data = self.coordinator.data.get("runstats", {})
+        finished = self._runstats_data.get("finished", {})
+        if finished:
+            self._state = finished.get("exit", "unknown")
+        self._attr_available = self._state is not None
+        self.force_update = True
+        # # Tell Home Assistant to refresh the UI with the new state
+        self.async_write_ha_state()
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
@@ -198,12 +227,7 @@ class NmapRunstatsSensor(HomeNetworkMonitorEntity, SensorEntity):
     @property
     def state(self) -> str:
         """Return the state of the sensor."""
-        if self.coordinator.data is None:
-            return "unknown"
-        finished = self._runstats_data.get("finished", {})
-        if finished:
-            return finished.get("exit", "unknown")
-        return "unknown"
+        return self._state
 
     @property
     def unique_id(self) -> str:
@@ -223,7 +247,9 @@ class NmapRunstatsSensor(HomeNetworkMonitorEntity, SensorEntity):
         )
 
 
-class NmapPostScriptSensor(HomeNetworkMonitorEntity, SensorEntity):
+class NmapPostScriptSensor(
+    CoordinatorEntity[HomeNetworkMonitorDataUpdateCoordinator],
+):
     """Sensor for Nmap scanning result output."""
 
     def __init__(
@@ -236,7 +262,25 @@ class NmapPostScriptSensor(HomeNetworkMonitorEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = entity_description
         self._post_script_data = post_script_data or {}
+        self._state = len(self._post_script_data)
         self._attr_unique_id = f"{DOMAIN}_{self.entity_description.key}"
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update sensor data when the coordinator publishes a new payload."""
+        _LOGGER.debug("Sensors %s _handle_coordinator_update called.", self.name)
+        if self.coordinator.data is None:
+            self._state = "unknown"
+        else:
+            self._post_script_data = self.coordinator.data.get("postscript", {})
+            if self._post_script_data:
+                self._state = len(self._post_script_data)
+            else:
+                self._state = 0
+        self._attr_available = self._state is not None
+        self.force_update = True
+        # # Tell Home Assistant to refresh the UI with the new state
+        self.async_write_ha_state()
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
@@ -260,8 +304,8 @@ class NmapPostScriptSensor(HomeNetworkMonitorEntity, SensorEntity):
     @property
     def state(self) -> int | None:
         """Return the state of the sensor."""
-        if self.coordinator.data is None:
-            return None
+        if self._post_script_data is None:
+            return 0
         return len(self._post_script_data)
 
     @property
@@ -282,7 +326,9 @@ class NmapPostScriptSensor(HomeNetworkMonitorEntity, SensorEntity):
         )
 
 
-class NmapHostsSensor(HomeNetworkMonitorEntity, SensorEntity):
+class NmapHostsSensor(
+    CoordinatorEntity[HomeNetworkMonitorDataUpdateCoordinator],
+):
     """Sensor for Nmap scanned hosts."""
 
     def __init__(
@@ -296,6 +342,20 @@ class NmapHostsSensor(HomeNetworkMonitorEntity, SensorEntity):
         self.entity_description = entity_description
         self._attr_unique_id = f"{DOMAIN}_{self.entity_description.key}"
         self._host_data = host_data or {}
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update sensor data when the coordinator publishes a new payload."""
+        _LOGGER.debug("Sensors %s _handle_coordinator_update called.", self.name)
+        if self.coordinator.data is None:
+            self._state = "unknown"
+        else:
+            self._post_script_data = self.coordinator.data.get("hosthint", {})
+            self._state = len(self._post_script_data)
+        self._attr_available = self._state is not None
+        self.force_update = True
+        # # Tell Home Assistant to refresh the UI with the new state
+        self.async_write_ha_state()
 
     @property
     def unit_of_measurement(self) -> str:
@@ -327,7 +387,9 @@ class NmapHostsSensor(HomeNetworkMonitorEntity, SensorEntity):
         )
 
 
-class NmapScanInfoSensor(HomeNetworkMonitorEntity, SensorEntity):
+class NmapScanInfoSensor(
+    CoordinatorEntity[HomeNetworkMonitorDataUpdateCoordinator],
+):
     """Sensor for Nmap scan information."""
 
     def __init__(
@@ -339,29 +401,42 @@ class NmapScanInfoSensor(HomeNetworkMonitorEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = entity_description
         self._attr_unique_id = f"{DOMAIN}_{self.entity_description.key}"
+        self._scan_info = self.coordinator.data.get("scaninfo", {})
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update sensor data when the coordinator publishes a new payload."""
+        _LOGGER.debug("Sensors %s _handle_coordinator_update called.", self.name)
+        if self.coordinator.data is None:
+            self._state = "unknown"
+        else:
+            self._scan_info = self.coordinator.data.get("scaninfo", {})
+            self._state = len(self._scan_info)
+        self._attr_available = self._state is not None
+        self.force_update = True
+        # # Tell Home Assistant to refresh the UI with the new state
+        self.async_write_ha_state()
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
         """Return the state attributes."""
         attributes = {}
-        scan_info = self.coordinator.data.get("scaninfo", {})
-        if scan_info:
-            attributes["scan_type"] = scan_info.get("type", "unknown")
-            attributes["protocol"] = scan_info.get("protocol", "unknown")
-            attributes["num_services"] = scan_info.get("numservices", "unknown")
+
+        if self._scan_info:
+            attributes["scan_type"] = self._scan_info.get("type", "unknown")
+            attributes["protocol"] = self._scan_info.get("protocol", "unknown")
+            attributes["num_services"] = self._scan_info.get("numservices", "unknown")
 
         return attributes
 
     @property
     def state(self) -> str:
         """Return the state of the sensor."""
-        if self.coordinator.data is None:
-            return "unknown"
-
-        scan_info = self.coordinator.data.get("scaninfo", {})
         result = "unknown"
+        if self.coordinator.data is None:
+            return result
 
-        if len(scan_info) > 0:
+        if len(self._scan_info) > 0:
             result = "OK"
 
         return str(result)
@@ -384,73 +459,78 @@ class NmapScanInfoSensor(HomeNetworkMonitorEntity, SensorEntity):
         )
 
 
-class Host(HomeNetworkMonitorEntity, SensorEntity):
-    """Sensor for individual host information."""
+class Host(
+    CoordinatorEntity[HomeNetworkMonitorDataUpdateCoordinator],
+):
+    """The host sensor ."""
 
     def __init__(
         self,
         coordinator: HomeNetworkMonitorDataUpdateCoordinator,
-        entity_description: SensorEntityDescription,
+        description: SensorEntityDescription,
         host_data: dict,
     ) -> None:
-        """Initialize the host sensor."""
+        """Initialize the sensor ."""
         super().__init__(coordinator)
-        self.entity_description = entity_description
-        self._host_data = host_data or {}
+        self._state = "up"
+        self._ip = NmapParser.extract_ip(host_data)
+        for host in self.coordinator.data.get("host", []):
+            if NmapParser.extract_ip(host) == self._ip:
+                self._state = host.get("status", {}).get("state", "unknown")
+        self.entity_description = description
+        self._attr_unique_id = self.make_unique_id(self._ip)
+        self._attr_available = True
+        self._host_data = host_data
 
-        # Extract IP address from the new JSON structure
-        self._ip = "unknown"
-        # Handle case where host_data might be a list
-        if isinstance(self._host_data, list):
-            # If it's a list, take the first item or use empty dict
-            self._host_data = self._host_data[0] if self._host_data else {}
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update host/port data when the coordinator publishes a new payload."""
+        host = self.coordinator.host_map.get(self._ip)
+        if host:
+            self._host_data = host
+            self._state = host.get("status", {}).get("state", "unknown")
+            self._attr_available = self._state is not None
+            self.force_update = True
+            _LOGGER.debug("Host %s found from coordinator.data.", self._ip)
+            # # Tell Home Assistant to refresh the UI with the new state
+            self.async_write_ha_state()
 
-        # Now safely extract IP address
-        self._ip = self._host_data.get("ip", "unknown")
-        if not self._ip or self._ip == "unknown":
-            address_data = self._host_data.get("address", {})
-            if isinstance(address_data, dict):
-                self._ip = address_data.get("addr", "unknown")
-            elif isinstance(address_data, list) and len(address_data) > 0:
-                # Handle case where address is a list
-                first_addr = address_data[0]
-                if (
-                    isinstance(first_addr, dict)
-                    and first_addr.get("addrtype") == "ipv4"
-                ):
-                    self._ip = first_addr.get("addr", "unknown")
-                if address_data and len(address_data) > 1:
-                    second_addr = address_data[1]
-                    if (
-                        isinstance(second_addr, dict)
-                        and second_addr.get("addrtype") == "mac"
-                    ):
-                        self._mac = second_addr.get("addr", "unknown")
+    async def async_added_to_hass(self) -> None:
+        """Register the sensor with the coordinator and Home Assistant."""
+        _LOGGER.debug("%s async_added_to_hass called", self.name)
+        await super().async_added_to_hass()
+        # Immediately write the state so that the UI is updated at least once.
+        self.async_write_ha_state()
 
-        if not self._ip or self._ip == "unknown":
-            self._ip = self._host_data.get("addr", "unknown")
-
-        self._attr_unique_id = f"{DOMAIN}_host_{self._ip}"
+    @staticmethod
+    def make_unique_id(ip: str) -> str:
+        """Make unique id of the sensor ."""
+        return f"{DOMAIN}_host_{ip}"
 
     @property
-    def unique_id(self) -> str:
-        """Return the unique ID of the sensor."""
-        if self._attr_unique_id is not None:
-            return self._attr_unique_id
-        return f"homenetworkmonitor_host_{self._ip}"
+    def available(self) -> bool:
+        """The available of the sensor ."""
+        return self._attr_available
+
+    @property
+    def native_value(self) -> str:
+        """Native value of the sensor ."""
+        return self._state  # e.g., "up" or "down"
 
     @property
     def state(self) -> str:
-        """Return the state of the sensor."""
-        status_data = self._host_data.get("status", {})
-        if isinstance(status_data, dict):
-            return status_data.get("state", "unknown")
-        return "unknown"
+        """The state of the sensor ."""
+        return self._state
 
     @property
     def name(self) -> str:
-        """Return the name of the sensor."""
+        """The name of the sensor ."""
         return f"Host {self._ip}"
+
+    @property
+    def ip(self) -> str:
+        """The ip of the host ."""
+        return self._ip
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
@@ -458,15 +538,9 @@ class Host(HomeNetworkMonitorEntity, SensorEntity):
         attributes = {}
         if self._host_data:
             attributes["ip"] = self._ip
-            attributes["status"] = self._host_data.get("status", "unknown")
-            attributes["state"] = self._host_data.get("state", "unknown")
-            attributes["mac"] = self._mac if hasattr(self, "_mac") else "unknown"
-            attributes["hostname"] = self._host_data.get("hostname", "unknown")
-            attributes["os"] = self._host_data.get("os", {})
-            attributes["uptime"] = self._host_data.get("uptime", {})
-            attributes["vendor"] = self._host_data.get("vendor", "unknown")
-            attributes["type"] = self._host_data.get("type", "unknown")
-            attributes["last_seen"] = self._host_data.get("last_seen", "unknown")
+            attributes["status"] = self._host_data.get("status")
+            attributes["mac"] = NmapParser.extract_mac(self._host_data)
+            attributes["hostnames"] = self._host_data.get("hostnames")
         return attributes
 
     @property
@@ -482,48 +556,94 @@ class Host(HomeNetworkMonitorEntity, SensorEntity):
         )
 
 
-class Port(HomeNetworkMonitorEntity, SensorEntity):
-    """Sensor for individual port information."""
+class Port(
+    CoordinatorEntity[HomeNetworkMonitorDataUpdateCoordinator],
+):
+    """The port used by the host ."""
 
     def __init__(
         self,
         coordinator: HomeNetworkMonitorDataUpdateCoordinator,
-        entity_description: SensorEntityDescription,
+        description: SensorEntityDescription,
+        host_data: dict,
         port_data: dict,
-        ip_address: str = "unknown",
     ) -> None:
-        """Initialize the port sensor."""
+        """Intitialization of the sensor ."""
         super().__init__(coordinator)
-        self.entity_description = entity_description
+        self.entity_description = description
         self._port_data = port_data
-        self._port_number = port_data.get("portid", "unknown")
-        self._unique_id = f"{DOMAIN}_port_{ip_address}_{self._port_number}"
-        self._ip_address = ip_address
-        self._attr_unique_id = f"{DOMAIN}_port_{ip_address}_{self._port_number}"
+        self._state = None
+        self._ip = NmapParser.extract_ip(host_data)
+
+        self._port = port_data.get("portid")
+        self._attr_unique_id = self.make_unique_id(self._ip, port_data)
+        self._attr_available = True
+        self._attr_extra_state_attributes = {}
+        self._port_state = "unknown"
+        for port in host_data.get("os", {}).get("portused", []):
+            if port.get("portid") == self._port:
+                self._port_state = port.get("state", "unknown")
+        self._state = self._port_state
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update host / port data when the coordinator publishes a new payload."""
+        # Convert the port status that the coordinator sent into the entity state.
+        new_hostdata = self.coordinator.host_map.get(self._ip)
+
+        if (
+            new_hostdata
+            and new_hostdata.get("os")
+            and self._port in new_hostdata.get("os", {}).get("portused", [])
+        ):
+            self._port_data = new_hostdata.get("os", {}).get("portused", [])[self._port]
+            _LOGGER.debug("%s found in _handle_coordinator_update", self.name)
+
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """Register the sensor with the coordinator and Home Assistant."""
+        _LOGGER.debug("%s async_added_to_hass called", self.name)
+        await super().async_added_to_hass()
+        # Immediately write the state so that the UI is updated at least once.
+        self.async_write_ha_state()
+
+    @staticmethod
+    def make_unique_id(ip: str, port_data: dict) -> str:
+        """Make unique id of the sensor ."""
+        return f"{DOMAIN}_port_{ip}_{port_data.get('portid')}"
 
     @property
-    def unique_id(self) -> str:
-        """Return the unique ID of the sensor."""
-        return self._unique_id
+    def available(self) -> bool:
+        """The available of the sensor ."""
+        return self._port_state is not None
 
     @property
-    def state(self) -> str:
-        """Return the state of the sensor."""
-        return self._port_data.get("state", "unknown")
+    def native_value(self) -> str | None:
+        """Native value of the sensor ."""
+        return self._state  # e.g., "up" or "down"
+
+    @property
+    def state(self) -> str | None:
+        """The state of the sensor ."""
+        return self._state
 
     @property
     def name(self) -> str:
-        """Return the name of the sensor."""
-        return f"Port {self._port_number} on {self._ip_address}"
+        """The name of the sensor ."""
+        return f"Port {self._port} on {self._ip}"
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
         """Return the state attributes."""
         attributes = {}
         if self._port_data:
-            attributes["portid"] = self._port_number
-            attributes["proto"] = self._port_data.get("proto", "unknown")
-            attributes["state"] = self._port_data.get("state", "unknown")
+            attributes["port_id"] = self._port
+            attributes["protocol"] = self._port_data.get("protocol")
+            attributes["state"] = self._port_data.get("state")
+            attributes["service"] = self._port_data.get("service")
+            attributes["version"] = self._port_data.get("version")
+            attributes["ip_address"] = self._ip
         return attributes
 
     @property
@@ -537,3 +657,56 @@ class Port(HomeNetworkMonitorEntity, SensorEntity):
             configuration_url=self.coordinator.config_entry.data.get("url", ""),
             entry_type=DeviceEntryType.SERVICE,
         )
+
+
+class NmapParser:
+    """Helper class to parse nmap data."""
+
+    @staticmethod
+    def extract_ip(host_data: dict[str, Any]) -> str:
+        """
+        Return the IPv4 address of the host.
+
+        Nmap returns a list under the key ``address``.  Each element in the
+        list is a dictionary that contains the fields:
+
+        * ``addr``      the actual address string
+        * ``addrtype``  the type of address (e.g. ``ipv4``, ``mac`` …)
+        * ``vendor``   vendor information (may be ``null``)
+        The first element of the list is *not* guaranteed to be the IPv4
+        address it could be the MAC address first, or it could contain
+        other address types.  Therefore we must look for the dictionary
+        whose ``addrtype`` is ``ipv4``.
+
+        If no IPv4 address is found we fall back to the legacy key
+        ``host_data["ip"]`` (used by earlier versions of this integration)
+        or the literal string ``"unknown"``.
+
+        Args:
+            host_data: Dictionary returned by Nmap for a single host.
+
+        Returns:
+            The IPv4 address as a string, or ``"unknown"`` when it cannot
+            be determined.
+
+        """
+        addresses = host_data.get("address", [])
+        if isinstance(addresses, list):
+            # Find the entry whose addrtype is ipv4
+            for addr_dict in addresses:
+                if isinstance(addr_dict, dict) and addr_dict.get("addrtype") == "ipv4":
+                    return addr_dict.get("addr", "unknown")
+        # Fallback to the legacy key that some older Nmap outputs use
+        return "unknown"
+
+    @staticmethod
+    def extract_mac(host_data: dict[str, Any]) -> str:
+        """Extract mc addres."""
+        addresses = host_data.get("address", [])
+        if isinstance(addresses, list):
+            # Find the entry whose addrtype is ipv4
+            for addr_dict in addresses:
+                if isinstance(addr_dict, dict) and addr_dict.get("addrtype") == "mac":
+                    return addr_dict.get("addr", "unknown")
+        # Fallback to the legacy key that some older Nmap outputs use
+        return "unknown"
