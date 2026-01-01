@@ -7,6 +7,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
@@ -38,7 +39,9 @@ class HomeNetworkMonitorDataUpdateCoordinator(DataUpdateCoordinator):
     ) -> None:
         """Initialize coordinator."""
         self.config_entry = config_entry
+        self._hass = hass
         self.client = client
+        self.previous_devices: set[str] = set()
         # Get update interval from config entry, default to 5 minutes
         update_interval = config_entry.data.get(UPDATE_INTERVAL, 5)
 
@@ -70,6 +73,23 @@ class HomeNetworkMonitorDataUpdateCoordinator(DataUpdateCoordinator):
                 "Unexpected error:",
             )  # Changed from error to exception
             raise UpdateFailed(exception) from exception
+
+        current_devices = set(data)
+        if stale_devices := self.previous_devices - current_devices:
+            device_registry = dr.async_get(self.hass)
+            for device_id in stale_devices:
+                device = device_registry.async_get_device(
+                    identifiers={(DOMAIN, device_id)}
+                )
+                if device:
+                    device_registry.async_update_device(
+                        device_id=device.id,
+                        remove_config_entry_id=self.config_entry.entry_id,
+                    )
+                    _LOGGER.debug("Device %s removed", device.name)
+
+        self.previous_devices = current_devices
+
         return data
 
     async def _async_process_raw(self, raw_data: Any) -> None:
@@ -79,6 +99,9 @@ class HomeNetworkMonitorDataUpdateCoordinator(DataUpdateCoordinator):
         _LOGGER.debug(
             "_host_map size %s in coordinator _async_process_raw", len(self._host_map)
         )
+        self._host_info_map = {
+            self._extract_ip(h): h for h in raw_data.get("hosthint", [])
+        }
 
     @staticmethod
     def _extract_ip(host_data: dict) -> str:
@@ -90,5 +113,10 @@ class HomeNetworkMonitorDataUpdateCoordinator(DataUpdateCoordinator):
 
     @property
     def host_map(self) -> dict:
-        """The available of the sensor ."""
+        """The all hosts information in dictionary."""
         return self._host_map
+
+    @property
+    def host_info_map(self) -> dict:
+        """The simple hosts information "hosthint" in dictionary."""
+        return self._host_info_map
