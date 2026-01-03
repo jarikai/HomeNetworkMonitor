@@ -1,0 +1,106 @@
+- id: hourly_nmap_assist_analysis
+  alias: Hourly Nmap host-map analysis with Assist
+  description: Uses an AI conversation agent to summarize nmap results hourly.
+  mode: single
+
+  trigger:
+  -   platform: time_pattern
+      hours: "/1"   # every hour on the hour
+
+  variables:
+    nmap_raw: "{{ state_attr('sensor.nmap_basic_host_info', 'host_map') }}"
+    nmap_json_text: >-
+      {% if nmap_raw is mapping %}
+        {% if 'hosts' in nmap_raw and nmap_raw['hosts'] is string %}
+          {{ nmap_raw['hosts'] }}
+        {% else %}
+          {{ nmap_raw | tojson }}
+        {% endif %}
+      {% else %}
+        {{ nmap_raw | string }}
+      {% endif %}
+    nmap_json_trimmed: "{{ nmap_json_text[:60000] }}"
+
+    # Add explicit overview values (safe defaults if the attribute is missing)
+    nmap_up: "{{ state_attr('sensor.nmap_runstats_data','up') | default('0', true) }}"
+    nmap_down: "{{ state_attr('sensor.nmap_runstats_data','down') | default('0', true) }}"
+    nmap_total: "{{ state_attr('sensor.nmap_runstats_data','total') | default('0', true) }}"
+    nmap_elapsed: "{{ state_attr('sensor.nmap_runstats_data','elapsed') | default('0', true) }}"
+
+    # The extra context you already have:
+    nmap_postscript: "{{ state_attr('sensor.nmap_postscript_data','postscript') | default('', true) }}"
+    nmap_scan_info: "{{ states('sensor.nmap_run_scan_info') | default('', true) }}"
+    nmap_runstats_summary: "{{ state_attr('sensor.nmap_runstats_data','Summary') | default('', true) }}"
+
+  condition: []
+
+  action:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ nmap_json_trimmed | length > 20 }}"
+        sequence:
+          # ✅ Service call must wrap the prompt in "data.text"
+          - service: conversation.process
+            data:
+              agent_id: conversation.ollama_conversation_llama3_latest
+              language: en
+              conversation_id: nmap_hourly_report
+              text: >-
+                SYSTEM:
+                You are a network analysis assistant for Home Assistant. Follow STYLE and OUTPUT FORMAT strictly.
+
+                STYLE (hard rules):
+                - No code blocks, no programming languages, no shell/CLI commands.
+                - No markdown fenced code.
+                - Use concise bullet points only; whole report <= 1200 characters.
+                - Do not output placeholders or schema labels; use actual values only.
+
+                INPUTS:
+                - Overview values: up={{ nmap_up }}, down={{ nmap_down }}, total={{ nmap_total }}, elapsed={{ nmap_elapsed }}s
+                - Scan info: {{ nmap_scan_info }}
+                - Postscript (security findings): {{ nmap_postscript }}
+                - Hosts JSON: {{ nmap_json_trimmed }}
+
+                TASK:
+                1) "Open ports by host": ONLY include hosts that have open TCP ports in the Hosts JSON
+                   (look for ports where state.state == "open"). If no open ports are present, write "None detected".
+                   Format each line EXACTLY as: "ip — port,port,… : short services".
+                   Example style only (do not reuse values): "192.168.1.150 — 22,80,443 : ssh,http,https".
+                2) Mention vendor/OS hints when obvious (Synology, VMware, Google, Espressif).
+                3) Summarize key security items from postscript (e.g., SMB/NetBIOS, RPC, MySQL 3306, JetDirect 9100, unknown web admin).
+                4) Provide 3 concrete mitigations.
+                5) Never invent ports; if uncertain, omit the host from the list.
+
+                OUTPUT FORMAT (bullets only; fill with real values, no placeholders):
+                - Overview: {{ nmap_up }}/{{ nmap_total }} hosts up; elapsed {{ nmap_elapsed }}s.
+                - Open ports by host:
+                  • <actual lines per host as specified above (max 10)>
+                - Risks:
+                  • <actual one-line risks (max 5)>
+                - Recommendations:
+                  • <three short mitigations>
+            response_variable: ai_out
+
+          # Extract plain speech text from the response object (unchanged)
+          - variables:
+              ai_text: >-
+                {% if ai_out and ai_out.response and ai_out.response.speech
+                      and ai_out.response.speech.plain and ai_out.response.speech.plain.speech %}
+                  {{ ai_out.response.speech.plain.speech }}
+                {% else %}
+                  (No text returned by the conversation agent.)
+                {% endif %}
+
+          - service: persistent_notification.create
+            data:
+              title: "Nmap hourly network report"
+              message: "{{ ai_text }}"
+
+    default:
+      - service: persistent_notification.create
+        data:
+          title: "Nmap hourly network report"
+          message: >-
+            host_map JSON not available from sensor.nmap_basic_host_info.
+            Will try again next hour.

@@ -1,6 +1,8 @@
 # Home Assistant Home Network Monitor integration
 This Home Assistant integration provides a [Nmap](https://nmap.org/) network scanner information of all devices on your local network.
 
+![Screenshot of the Home Network Monitor integration](media/hnm_haui.png)
+
 ## Why?
 This integration was made to save server resources on Home Assistant server by running Nmap in the other server. User can setup the other server for scanning with their own needs with available resources. After you have working configuration you can make automations to get you local network more secure. Examples:
 - Alert when unknown device is found in your network
@@ -84,7 +86,7 @@ Server configuration:
 3. Create shell script to run the Nmap and xml to json conversion. I have this in my script:
 ***
 ```sh
-nmap -sS -sV -O -F --host-timeout 30s -oX /tmp/local_network.xml 192.168.1.0/24
+nmap -sS -sV --version-intensity 7 -O -p- --script "default,vuln" --host-timeout 60s -oX /tmp/local_network.xml 192.168.1.0/24
 dotnet /opt/kaipio/nmap/nmapxml2json.dll /tmp/local_network.xml /var/www/html/data/local_network.json
 ```
 ***
