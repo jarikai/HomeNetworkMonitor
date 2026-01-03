@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 
 import voluptuous as vol
-from homeassistant import config_entries
 from homeassistant.const import (
     CONF_PASSWORD,
     CONF_URL,
@@ -14,6 +13,8 @@ from homeassistant.const import (
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from slugify import slugify
+
+from homeassistant import config_entries
 
 from .api import (
     HomeNetworkMonitorApiClient,
