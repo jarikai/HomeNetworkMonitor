@@ -342,6 +342,7 @@ class NmapScanInfoSensor(
             attributes["scan_type"] = self._scan_info.get("type", "unknown")
             attributes["protocol"] = self._scan_info.get("protocol", "unknown")
             attributes["num_services"] = self._scan_info.get("numservices", "unknown")
+            attributes["services"] = self._scan_info.get("services", "unknown")
 
         return attributes
 
