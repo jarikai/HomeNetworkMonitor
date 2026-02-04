@@ -2,7 +2,7 @@
     "config": {
         "step": {
             "user": {
-                "description": "If you need help with the configuration have a look here: https://github.com/jarikai/homenetworkmonitor",
+                "description": "Set your credentials to connect to server sharing your nmap scan result, if needed.",
                 "data": {
                     "username": "Username",
                     "password": "Password"
